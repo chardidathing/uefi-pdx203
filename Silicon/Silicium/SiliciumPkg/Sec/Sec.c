@@ -18,6 +18,34 @@
 
 #include "Sec.h"
 
+// first argument (x0) of the previous stage, saved by ModuleEntryPoint.S
+extern UINT64 gSecEntryArg0;
+
+// Helper.S, clean and invalidate every data cache level by set/way
+extern VOID SecCleanInvalidateDataCacheAll (VOID);
+
+// walks the hob list with a bound, a zero length or runaway entry is reported instead of looping forever in the fv decompression
+STATIC
+VOID
+CheckHobList (VOID)
+{
+  EFI_PEI_HOB_POINTERS Hob;
+  UINTN                Count = 0;
+
+  Hob.Raw = GetHobList ();
+  while (!END_OF_HOB_LIST (Hob)) {
+    if (Hob.Header->HobLength < sizeof (EFI_HOB_GENERIC_HEADER) || Count >= 16384) {
+      DEBUG ((EFI_D_ERROR, "SEC: HOB list broken at entry %u: type 0x%x length %u\n", (UINT32)Count, (UINT32)Hob.Header->HobType, (UINT32)Hob.Header->HobLength));
+      return;
+    }
+
+    Count++;
+    Hob.Raw = GET_NEXT_HOB (Hob);
+  }
+
+  DEBUG ((EFI_D_WARN, "SEC: HOB list ok, %u entries\n", (UINT32)Count));
+}
+
 #ifndef MDEPKG_NDEBUG
 STATIC
 VOID
@@ -118,6 +146,8 @@ SecMain (VOID)
     return;
   }
 
+  DEBUG ((EFI_D_WARN, "SEC: memory HOBs done\n"));
+
   // Build CPU HOB
   BuildCpuHob (ArmGetPhysicalAddressBits (), PcdGet8 (PcdPrePiCpuIoSize));
 
@@ -126,21 +156,34 @@ SecMain (VOID)
 
   // Initialize Platform HOBs
   Status = PlatformPeim ();
+  DEBUG ((EFI_D_WARN, "SEC: platform HOBs done (%r)\n", Status));
   if (EFI_ERROR (Status)) {
     return;
   }
 
+  // pass on what the previous stage handed over in x0 (the device tree of a linux style loader) so a dxe driver can read it
+  {
+    UINT64 EntryArg = gSecEntryArg0;
+
+    BuildGuidDataHob (&gSiliciumEntryArgHobGuid, &EntryArg, sizeof (EntryArg));
+  }
+
+  CheckHobList ();
+
   // Run Library Cconstructors
   ProcessLibraryConstructorList ();
+  DEBUG ((EFI_D_WARN, "SEC: constructors done\n"));
 
   // Decompress all FVs
   Status = DecompressFirstFv ();
+  DEBUG ((EFI_D_WARN, "SEC: FV decompressed (%r)\n", Status));
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Failed to Decompress FV! Status = %r\n", Status));
     return;
   }
 
   // Load DXE Core
+  DEBUG ((EFI_D_WARN, "SEC: loading DXE core\n"));
   Status = LoadDxeCoreFromFv (NULL, 0);
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "Failed to Load DXE Core! Status = %r\n", Status));
@@ -150,6 +193,9 @@ SecMain (VOID)
 VOID
 SecEntry (VOID)
 {
+  // the stack was just cleared with whatever cache state the previous stage left, push it out before the cache goes off
+  SecCleanInvalidateDataCacheAll ();
+
   // Disable Data Cache
   ArmDisableDataCache ();
 
@@ -159,9 +205,10 @@ SecEntry (VOID)
   // Enable Instruction Cache
   ArmEnableInstructionCache ();
 
-  // Invalidate Stack & UEFI FD D-Cache
-  InvalidateDataCacheRange ((VOID *)FixedPcdGet64 (PcdCPUCoresStackBase), FixedPcdGet32 (PcdCPUCorePrimaryStackSize));
-  InvalidateDataCacheRange ((VOID *)FixedPcdGet64 (PcdFdBaseAddress),     FixedPcdGet32 (PcdFdSize));
+  // write back before invalidating, a plain invalidate throws away what the entry code just stored (live stack frames, gSecEntryArg0)
+  // when the previous stage left the data cache on
+  WriteBackInvalidateDataCacheRange ((VOID *)FixedPcdGet64 (PcdCPUCoresStackBase), FixedPcdGet32 (PcdCPUCorePrimaryStackSize));
+  WriteBackInvalidateDataCacheRange ((VOID *)FixedPcdGet64 (PcdFdBaseAddress),     FixedPcdGet32 (PcdFdSize));
 
   // Verify Exception Vector Table
   ASSERT (((UINTN)SecVectorTable & ARM_VECTOR_TABLE_ALIGNMENT) == 0);

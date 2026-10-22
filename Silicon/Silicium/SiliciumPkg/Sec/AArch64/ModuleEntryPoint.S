@@ -13,6 +13,19 @@
 .set CTRL_SPAN_BIT, BIT23
 
 ASM_FUNC (_ModuleEntryPoint)
+  // the previous stage may enter with spsel 0, exceptions would then run on a stale sp_el1 instead of the stack set up below
+  msr   SPSel, #1
+  isb
+
+  // before the first store of this stage, clean and invalidate the data caches the previous stage filled (x0 survives in x20)
+  mov   x20, x0
+  bl    ASM_PFX (SecCleanInvalidateDataCacheAll)
+  mov   x0, x20
+
+  // keep x0 for the platform, a linux style loader passes the physical address of its device tree there
+  adr   x1, ASM_PFX (gSecEntryArg0)
+  str   x0, [x1]
+
   // Do Platform Specific Initialization
   bl    ASM_PFX (PlatformAssemblyInitialize)
 
@@ -61,3 +74,9 @@ ASM_PFX (MainEntryPoint):
 
   // Do Infinite Spin
   b     .
+
+  // first argument of the previous stage, written once at entry
+  .align 3
+  .global ASM_PFX (gSecEntryArg0)
+ASM_PFX (gSecEntryArg0):
+  .quad 0

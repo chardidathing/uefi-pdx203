@@ -7,7 +7,7 @@ _StackBase:
   .quad FD_BASE         /* Text Offset */
 
 _StackSize:
-  .quad FD_SIZE         /* Image Size */
+  .quad FD_SIZE + (_Payload - _Head) /* image size, the loader reserves the shim as well */
   .quad 0               /* Flags */
   .quad 0               /* Reserved */
   .quad 0               /* Reserved */
@@ -31,12 +31,33 @@ _CopyLoop:
   ldr   x5, =FD_BASE
 
 _Entry:
+  /* the loader may hand over with the data cache on, push the copied lines out and drop stale instructions before running them */
+  dsb   sy
+  mrs   x9, ctr_el0
+  ubfx  x9, x9, #16, #4
+  mov   x10, #4
+  lsl   x9, x10, x9
+  sub   x10, x9, #1
+  bic   x8, x5, x10
+  ldr   x7, =FD_SIZE
+  add   x7, x5, x7
+
+_CleanLoop:
+  dc    cvac, x8
+  add   x8, x8, x9
+  cmp   x8, x7
+  b.lo  _CleanLoop
+  dsb   sy
+  ic    iallu
+  dsb   sy
+  isb
   br    x5
 
 _Dead:
   b     _Dead
 
 .text
+.ltorg
 .align 4
 
 _Payload:
