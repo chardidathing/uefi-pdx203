@@ -99,6 +99,10 @@
   #
   gQcomPkgTokenSpaceGuid.PcdPlatformType|NULL|VOID*|0x0000C000
 
+  # true scans the stock fd window for the xbl hob registration functions and calls into the stock scheduler protocol found there,
+  # only the vendor drivers read those hobs, a build without them sets this false so no stock code or stale memory is touched in sec
+  gQcomPkgTokenSpaceGuid.PcdBuildXblHobs|TRUE|BOOLEAN|0x0000C001
+
   #
   # Memory
   #
@@ -109,6 +113,16 @@
   # Storage
   #
   gQcomPkgTokenSpaceGuid.PcdStorageIsUfs3|TRUE|BOOLEAN|0x0000C200
+
+  #
+  # Display
+  #
+  # a command mode panel only shows what the previous stage pushed once, the mdp has to be told to resend the splash buffer on every
+  # te pulse (pingpong autorefresh) or the frame buffer log and the gop stay invisible. the base is the pingpong block the loader
+  # drives the panel through (mdss base + qcom,sde-pp-off of that pingpong), 0 is a video mode panel and nothing is touched.
+  gQcomPkgTokenSpaceGuid.PcdMdpPingPongBase|0x0|UINT32|0x0000C400
+  # vsync counter for the tearcheck block when the loader left it off, timer clock / (vtotal * refresh), as the linux cmd encoder sets
+  gQcomPkgTokenSpaceGuid.PcdMdpTearCheckVsyncCount|0x0|UINT32|0x0000C401
 
   #
   # Mass Storage

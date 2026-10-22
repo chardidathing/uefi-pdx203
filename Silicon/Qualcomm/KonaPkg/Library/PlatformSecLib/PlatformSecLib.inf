@@ -25,5 +25,12 @@
 
 [LibraryClasses]
   IoLib
+  ArmLib
+  PcdLib
   MemoryMapHelperLib
   ArmSmmuDetachLib
+
+[FixedPcd]
+  gQcomPkgTokenSpaceGuid.PcdMdpPingPongBase
+  gQcomPkgTokenSpaceGuid.PcdMdpTearCheckVsyncCount
+  gSiliciumPkgTokenSpaceGuid.PcdFrameBufferHeight
