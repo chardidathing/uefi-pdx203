@@ -1,0 +1,39 @@
+#
+# Boot Shim Configs
+#
+[boot_shim]
+requires_kernel_header = true
+
+#
+# UEFI FD Configs
+#
+# the kona uefiplat "UEFI FD" slot, between the splash buffer and the kernel area the loader fills
+[uefi_fd]
+base = 0x9FC00000
+size = 0x300000
+
+#
+# Android Boot Image Kernel Configs
+#
+# the stock boot image is header v2, the dtb goes into its own section, the kernel field stays a plain gzip stream
+[boot_image_kernel]
+kernel_compression = "gzip"
+append_dtb         = false
+
+#
+# Android Boot Image Configs
+#
+# header and offsets of the stock sony boot image (verified by the ios-sweet shim, the same packing boots on the phone),
+# the dtb is the stock kona dtb set, the loader picks the soc revision out of it
+[boot_image]
+header_version = 2
+base           = 0x0
+kernel_offset  = 0x8000
+ramdisk_offset = 0x2000000
+tags_offset    = 0x1e00000
+dtb_offset     = 0x1f00000
+pagesize       = 4096
+os_version     = "11.0.0"
+os_patch_level = "2021-06"
+cmdline        = "androidboot.hardware=pdx203"
+dtb            = "Resources/DTBs/pdx203.dtb"
